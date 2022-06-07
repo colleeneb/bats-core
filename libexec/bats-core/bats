@@ -60,6 +60,8 @@ HELP_TEXT_HEADER
   -x, --trace               Print test commands as they are executed (like `set -x`)
   --verbose-run             Make `run` print `$output` by default
   -v, --version             Display the version number
+  -e, --timeout             Set timeout value in seconds for the test case
+                            Only works in serial
 
   For more information, see https://github.com/bats-core/bats-core
 HELP_TEXT_BODY
@@ -149,6 +151,10 @@ while [[ "$#" -ne 0 ]]; do
   -f | --filter)
     shift
     flags+=('-f' "$1")
+    ;;
+  -e|--timeout)
+    shift
+    flags+=('-e' "$1")
     ;;
   -F | --formatter)
     shift

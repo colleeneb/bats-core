@@ -6,6 +6,12 @@ num_jobs=${BATS_NUMBER_OF_PARALLEL_JOBS:-1}
 filter=''
 extended_syntax=''
 BATS_TRACE_LEVEL="${BATS_TRACE_LEVEL:-0}"
+timeout_value_passed=
+
+abort() {
+  printf 'Error: %s\n' "$1" >&2
+  exit 1
+}
 
 while [[ "$#" -ne 0 ]]; do
   case "$1" in
@@ -19,6 +25,11 @@ while [[ "$#" -ne 0 ]]; do
   -j)
     shift
     num_jobs="$1"
+    ;;
+  -e)
+    TIMEOUT_VAL="$2"
+    timeout_value_passed=1
+    shift
     ;;
   -T)
     flags+=('-T')
@@ -264,12 +275,46 @@ bats_run_tests() {
       if [[ $test_name ]]; then
         ((++test_number_in_suite))
         ((++test_number_in_file))
-        # deal with empty flags to avoid spurious "unbound variable" errors on Bash 4.3 and lower
+
+				# only run if timeout exists and timeout val is passed
+    				timeout_command="/usr/bin/timeout"
+				if [[ -z "$timeout_value_passed" ]]; then
+
+	# deal with empty flags to avoid spurious "unbound variable" errors on Bash 4.3 and lower
         if [[ "${#flags[@]}" -gt 0 ]]; then
           "$BATS_LIBEXEC/bats-exec-test" "${flags[@]}" "$filename" "$test_name" "$test_number_in_suite" "$test_number_in_file" || bats_exec_file_status=1
         else
           "$BATS_LIBEXEC/bats-exec-test" "$filename" "$test_name" "$test_number_in_suite" "$test_number_in_file" || bats_exec_file_status=1
         fi
+
+
+				elif [[ -x ${timeout_command} ]] ; then
+					TS=$(date -u '+%Y.%m.%d %H:%M:%S')
+					echo "Starting to run #${test_number_in_suite} ${filename#*source/}:$test_number_in_file @ $TS!" >&2
+					if [[ -w /dev/kmsg ]]; then
+						echo "Starting to run ${filename#*source/}:$test_number_in_file @ $TS!" > /dev/kmsg
+					fi
+					#Only kill the suite test set otherwise the rest of the cleanup wont happen
+					BATS_PIDS=$(ps -eaf | grep bats-exec-suite | grep -v grep | awk -v ORS=' ' '{print $2}')
+					BATS_PNAME=$(ps -eaf | grep bats-exec-suite | grep -v "grep" || true)
+					# deal with empty flags to avoid spurious "unbound variable" errors on Bash 4.3 and lower
+					if [[ "${#flags[@]}" -gt 0 ]]; then
+					    ${timeout_command} -k 120 $TIMEOUT_VAL "$BATS_LIBEXEC/bats-exec-test" "${flags[@]}" "$filename" "$test_name" "$test_number_in_suite" "$test_number_in_file" || bats_exec_file_status=1
+					else
+					    ${timeout_command} -k 120 $TIMEOUT_VAL "$BATS_LIBEXEC/bats-exec-test" "$filename" "$test_name" "$test_number_in_suite" "$test_number_in_file" || bats_exec_file_status=1
+					fi
+					set +e
+					CLEANUP_EXIT="$(source "$BATS_ROOT/../utils/common_functions.bash"; test_cleanup "$BATS_PIDS" "$BATS_PNAME" >&2)$?"
+					set -e
+					if [[ "$CLEANUP_EXIT" -gt 0 ]]; then 
+						abort "Exit $filename:$test_number_in_file because of test_cleanup error"
+					fi
+				else
+					abort "Incorrect ${TIMEOUT_VAL} value or missing ${timeout_command} in your system"
+				fi
+
+
+	
       fi
     done
   fi

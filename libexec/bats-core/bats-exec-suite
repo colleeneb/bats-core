@@ -6,6 +6,7 @@ filter=''
 num_jobs=${BATS_NUMBER_OF_PARALLEL_JOBS:-1}
 bats_no_parallelize_across_files=${BATS_NO_PARALLELIZE_ACROSS_FILES-}
 bats_no_parallelize_within_files=
+timeout_value_passed=
 flags=('--dummy-flag') # add a dummy flag to prevent unset varialeb errors on empty array expansion in old bash versions
 setup_suite_file=''
 BATS_TRACE_LEVEL="${BATS_TRACE_LEVEL:-0}"
@@ -29,6 +30,12 @@ while [[ "$#" -ne 0 ]]; do
     shift
     num_jobs="$1"
     flags+=('-j' "$num_jobs")
+    ;;
+    -e)
+    TIMEOUT_VAL="$2"
+    timeout_value_passed=1
+		flags+=('-e' "$TIMEOUT_VAL")
+    shift
     ;;
   -T)
     flags+=('-T')
